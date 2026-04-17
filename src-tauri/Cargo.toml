@@ -27,10 +27,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # --- 請新增以下這幾行 ---
-# 1. 用來發送網路請求給 Gemini API
-# 1. 官方等級的 Gemini Rust Client
-gemini-rust = "1.7.1"
-
 # 2. 用來讓 Rust 可以非同步處理 (不會卡住視窗)
 tokio = { version = "1", features = ["full"] }
 

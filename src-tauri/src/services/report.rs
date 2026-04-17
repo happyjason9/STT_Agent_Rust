@@ -93,6 +93,10 @@ pub const DEFAULT_PROMPT: &str = r#"
                - 保持專業術語的準確性。
         "#;
 
+// 6. **醫學術語翻譯**：
+// - 將轉錄的英文術語翻譯中文後，中英文一起顯示(ex. Abdominal Aortic Aneurysm -> 腹主動脈瘤(Abdominal Aortic Aneurysm))。
+// - 保持專業術語的準確性。
+
 pub struct ReportAgent {
     api_key: String,
     client: reqwest::Client,
@@ -384,8 +388,6 @@ impl ReportAgent {
         // Step 1: 初始化 Resumable Upload
         const UPLOAD_URL: &str = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 
-        let init_url = format!("{UPLOAD_URL}?key={}", self.api_key);
-
         let metadata = serde_json::json!({
             "file": {
                 "display_name": file_name
@@ -394,7 +396,8 @@ impl ReportAgent {
 
         let init_response = self
             .client
-            .post(&init_url)
+            .post(UPLOAD_URL)
+            .header("x-goog-api-key", &self.api_key)
             .header("X-Goog-Upload-Protocol", "resumable")
             .header("X-Goog-Upload-Command", "start")
             .header("X-Goog-Upload-Header-Content-Length", file_size.to_string())
@@ -460,13 +463,14 @@ impl ReportAgent {
     /// 取得檔案狀態
     async fn get_file_state(&self, file_name: &str) -> Result<String, String> {
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
-            file_name, self.api_key
+            "https://generativelanguage.googleapis.com/v1beta/{}",
+            file_name
         );
 
         let response = self
             .client
             .get(&url)
+            .header("x-goog-api-key", &self.api_key)
             .send()
             .await
             .map_err(|e| format!("查詢檔案狀態失敗: {}", e))?;
@@ -484,11 +488,11 @@ impl ReportAgent {
         // 從 URI 中提取檔案名稱
         let file_name = file_uri.split('/').last().unwrap_or_default();
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/files/{}?key={}",
-            file_name, self.api_key
+            "https://generativelanguage.googleapis.com/v1beta/files/{}",
+            file_name
         );
 
-        let _ = self.client.delete(&url).send().await;
+        let _ = self.client.delete(&url).header("x-goog-api-key", &self.api_key).send().await;
         Ok(())
     }
 
@@ -500,8 +504,8 @@ impl ReportAgent {
         prompt: &str,
     ) -> Result<String, String> {
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-            model_name, self.api_key
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+            model_name
         );
 
         let request = GenerateRequest {
@@ -523,6 +527,7 @@ impl ReportAgent {
         let response = self
             .client
             .post(&url)
+            .header("x-goog-api-key", &self.api_key)
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
