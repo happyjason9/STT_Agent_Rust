@@ -68,6 +68,7 @@ impl Silence {
             .http_client
             .post(&url)
             .multipart(form)
+            .timeout(std::time::Duration::from_secs(300))
             .send()
             .await
             .map_err(|e| format!("Request failed: {}", e))?;

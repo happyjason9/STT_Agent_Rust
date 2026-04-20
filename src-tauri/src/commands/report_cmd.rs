@@ -34,12 +34,16 @@ pub async fn generate_report(
     };
 
     // 根據資料夾路徑推算輸出路徑 (04_report/report.md)
-    let output_path = if folder_path.contains("02_split") {
-        // 如果選的是 02_split，輸出到 04_report
-        folder_path.replace("02_split", "04_report") + "/report.md"
-    } else {
-        // 否則在同目錄建立 report.md
-        format!("{}/report.md", folder_path)
+    let output_path = {
+        let folder = Path::new(&folder_path);
+        if folder.ends_with("02_split") {
+            folder
+                .parent()
+                .map(|p| p.join("04_report").join("report.md").to_string_lossy().to_string())
+                .unwrap_or_else(|| format!("{}/report.md", folder_path))
+        } else {
+            format!("{}/report.md", folder_path)
+        }
     };
 
     // 1. 生成報告 (Markdown)

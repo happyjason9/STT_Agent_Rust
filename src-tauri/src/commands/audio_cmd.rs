@@ -285,6 +285,12 @@ pub async fn apply_silence_command(
         let start = parse_time(&seg.start_time).map_err(|e| format!("開始時間格式錯誤: {}", e))?;
         let end = parse_time(&seg.end_time).map_err(|e| format!("結束時間格式錯誤: {}", e))?;
 
+        if start < 0.0 {
+            return Err(format!("開始時間不能為負數 ({})", seg.start_time));
+        }
+        if end < 0.0 {
+            return Err(format!("結束時間不能為負數 ({})", seg.end_time));
+        }
         if start >= end {
             return Err(format!(
                 "開始時間必須小於結束時間 ({}-{})",

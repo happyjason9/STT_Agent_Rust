@@ -120,6 +120,9 @@ impl ReportAgent {
     ) -> Result<String, String> {
         // 0. 決定模型 (預設 gemini-3.1-pro-preview)
         let model = model_name.unwrap_or_else(|| "gemini-3.1-pro-preview".to_string());
+        if !model.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '.') || model.is_empty() {
+            return Err(format!("無效的模型名稱: {}", model));
+        }
         println!("使用模型: {}", model);
         // 1. 列出音檔
         let audio_extensions = ["mp3", "wav", "aac", "flac", "ogg", "m4a"];
