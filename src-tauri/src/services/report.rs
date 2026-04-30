@@ -185,10 +185,15 @@ impl ReportAgent {
                     ));
                 }
                 Err(e) => {
+                    // 發生錯誤時，將錯誤訊息寫入報告並立即中斷
                     report_content.push_str(&format!(
-                        "## 【個案來源：{}】\n\n[處理錯誤] {}\n\n---\n\n",
+                        "## 【個案來源：{}】\n\n[API 呼叫中斷] {}\n\n---\n\n",
                         filename, e
                     ));
+                    // 將已經成功處理的部分寫入檔案，以免前面做白工
+                    let _ = fs::write(output_path, &report_content);
+                    
+                    return Err(format!("在處理「{}」時發生錯誤：\n{}\n\n（處理已中斷暫停，但在這之前成功的紀錄已儲存）", filename, e));
                 }
             }
         }

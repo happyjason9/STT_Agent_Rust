@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, message } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../i18n";
 
 interface ReportPageProps {
@@ -122,7 +122,12 @@ export function ReportPage({ isActive }: ReportPageProps) {
                 // setReportPath(match[1]);
             }
         } catch (err) {
-            setOutput(`${t.error}: ${err}`);
+            const errorMsg = String(err);
+            setOutput(`${t.error}: ${errorMsg}`);
+            await message(errorMsg, {
+                title: language === "zh" ? "API 處理發生錯誤" : "API Processing Error",
+                kind: "error"
+            });
         } finally {
             setLoading(false);
         }
@@ -247,7 +252,7 @@ export function ReportPage({ isActive }: ReportPageProps) {
                     onChange={(e) => setModelName(e.target.value)}
                 >
                     <option value="gemini-3.1-pro-preview">{`gemini-3.1-pro-preview ${t.defaultSuffix}`}</option>
-                    <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                    <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
                     <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
                     <option value="gemini-2.5-pro">gemini-2.5-pro</option>
                     <option value="gemini-2.5-flash">gemini-2.5-flash</option>
