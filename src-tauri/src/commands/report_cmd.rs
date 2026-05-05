@@ -2,6 +2,74 @@
 use crate::services::report::ReportAgent;
 use std::path::Path;
 use tauri::command;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct GeminiModelsResponse {
+    models: Option<Vec<GeminiModelInfo>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminiModelInfo {
+    name: String,
+    #[serde(rename = "supportedGenerationMethods")]
+    supported_generation_methods: Option<Vec<String>>,
+}
+
+/// 列出 Gemini 可用模型（支援 generateContent）
+#[command]
+pub async fn list_gemini_models(api_key: String) -> Result<Vec<String>, String> {
+    if api_key.is_empty() {
+        return Err("請輸入 Gemini API Key".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let url = "https://generativelanguage.googleapis.com/v1beta/models";
+
+    let resp = client
+        .get(url)
+        .header("x-goog-api-key", &api_key)
+        .send()
+        .await
+        .map_err(|e| format!("無法連線到 Gemini API: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Gemini API 回傳錯誤 {}: {}", status, body));
+    }
+
+    let data: GeminiModelsResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("解析模型清單失敗: {}", e))?;
+
+    let excluded_keywords = ["embedding", "aqa", "imagen", "tts", "veo", "learnlm"];
+
+    let models = data.models.unwrap_or_default();
+    let mut result: Vec<String> = models
+        .into_iter()
+        .filter(|m| {
+            // 必須支援 generateContent
+            let supports_generate = m.supported_generation_methods
+                .as_ref()
+                .map(|methods| methods.iter().any(|method| method == "generateContent"))
+                .unwrap_or(false);
+            if !supports_generate {
+                return false;
+            }
+            // 只保留 gemini- 開頭，排除非多模態模型
+            let model_id = m.name.strip_prefix("models/").unwrap_or(&m.name).to_lowercase();
+            model_id.starts_with("gemini-") && !excluded_keywords.iter().any(|kw| model_id.contains(kw))
+        })
+        .map(|m| {
+            m.name.strip_prefix("models/").unwrap_or(&m.name).to_string()
+        })
+        .collect();
+
+    result.sort();
+    Ok(result)
+}
 
 /// 生成報告
 /// 處理指定資料夾中的音檔，生成逐字稿報告，並自動轉換為 DOCX

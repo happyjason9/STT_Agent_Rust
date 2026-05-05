@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, message } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../i18n";
@@ -16,11 +16,33 @@ export function ReportPage({ isActive }: ReportPageProps) {
     const [loading, setLoading] = useState(false);
     // const [converting, setConverting] = useState(false);
     // const [reportPath, setReportPath] = useState("");
-    const [modelName, setModelName] = useState("gemini-3.1-pro-preview");
+    const [modelName, setModelName] = useState("gemini-2.5-pro");
+    const [availableModels, setAvailableModels] = useState<string[]>([]);
+    const [modelsLoading, setModelsLoading] = useState(false);
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [customPromptPath, setCustomPromptPath] = useState("");
     const [showPromptModal, setShowPromptModal] = useState(false);
     const [defaultPrompt, setDefaultPrompt] = useState("");
     const [modalTitle, setModalTitle] = useState("");
+
+    // 取得 Gemini 可用模型列表
+    async function fetchAvailableModels(key: string) {
+        if (!key) return;
+        setModelsLoading(true);
+        try {
+            const models = await invoke<string[]>("list_gemini_models", { apiKey: key });
+            setAvailableModels(models);
+            // 若目前選擇的模型不在列表中，切換到第一個
+            if (models.length > 0 && !models.includes(modelName)) {
+                setModelName(models[0]);
+            }
+        } catch {
+            // API Key 錯誤或網路問題時靜默失敗，保留內建清單
+            setAvailableModels([]);
+        } finally {
+            setModelsLoading(false);
+        }
+    }
 
     // 選擇資料夾
     async function handleSelectFolder() {
@@ -228,7 +250,12 @@ export function ReportPage({ isActive }: ReportPageProps) {
                     <input
                         type={showApiKey ? "text" : "password"}
                         className="input"
-                        onChange={(e) => setApiKey(e.target.value)}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setApiKey(val);
+                            if (debounceTimer.current) clearTimeout(debounceTimer.current);
+                            debounceTimer.current = setTimeout(() => fetchAvailableModels(val), 1000);
+                        }}
                         placeholder={t.apiKeyPlaceholder}
                         value={apiKey}
                         style={{ flex: 1, maxWidth: "400px" }}
@@ -245,18 +272,39 @@ export function ReportPage({ isActive }: ReportPageProps) {
 
             {/* 模型選擇 */}
             <div className="input-group" style={{ marginBottom: "20px" }}>
-                <label className="input-label">{t.selectModel}</label>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <label className="input-label" style={{ marginBottom: 0 }}>{t.selectModel}</label>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => fetchAvailableModels(apiKey)}
+                        disabled={!apiKey || modelsLoading}
+                        style={{ padding: "4px 12px", fontSize: "0.9rem" }}
+                    >
+                        {modelsLoading ? <span className="loading-spinner"></span> : "🔄"} {language === "zh" ? "重新偵測" : "Refresh"}
+                    </button>
+                </div>
                 <select
                     className="custom-file-select"
                     value={modelName}
                     onChange={(e) => setModelName(e.target.value)}
                 >
-                    <option value="gemini-3.1-pro-preview">{`gemini-3.1-pro-preview ${t.defaultSuffix}`}</option>
-                    <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
-                    <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                    <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                    {availableModels.length > 0 ? (
+                        availableModels.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                        ))
+                    ) : (
+                        <>
+                            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                        </>
+                    )}
                 </select>
+                {availableModels.length > 0 && (
+                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                        {language === "zh" ? `✅ 已偵測到 ${availableModels.length} 個可用模型` : `✅ ${availableModels.length} models detected`}
+                    </div>
+                )}
             </div>
 
             {/* 自定義 Prompt 輸入 */}
