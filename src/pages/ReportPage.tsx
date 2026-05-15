@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open, message } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../i18n";
 
@@ -25,19 +26,50 @@ export function ReportPage({ isActive }: ReportPageProps) {
     const [defaultPrompt, setDefaultPrompt] = useState("");
     const [modalTitle, setModalTitle] = useState("");
 
+    interface ModelPricing {
+        model_id: string;
+        input_free: string;
+        input_paid: string;
+        output_free: string;
+        output_paid: string;
+        sort_price: number;
+    }
+    const [pricingMap, setPricingMap] = useState<Record<string, ModelPricing>>({});
+    const [showPriceModal, setShowPriceModal] = useState(false);
+
+    // 啟動時抓取定價（每天一次，由後端快取）
+    useEffect(() => {
+        invoke<ModelPricing[]>("fetch_gemini_pricing")
+            .then((list) => {
+                const map: Record<string, ModelPricing> = {};
+                list.forEach((p) => { map[p.model_id] = p; });
+                setPricingMap(map);
+            })
+            .catch(() => {}); // 失敗靜默，不影響主功能
+    }, []);
+
+    // 依定價排序模型列表（sort_price 低到高），無定價資料排最後
+    function sortModelsByPrice(models: string[]): string[] {
+        return [...models].sort((a, b) => {
+            const pa = pricingMap[a]?.sort_price ?? 9999;
+            const pb = pricingMap[b]?.sort_price ?? 9999;
+            if (pa !== pb) return pa - pb;
+            return a.localeCompare(b);
+        });
+    }
+
     // 取得 Gemini 可用模型列表
     async function fetchAvailableModels(key: string) {
         if (!key) return;
         setModelsLoading(true);
         try {
             const models = await invoke<string[]>("list_gemini_models", { apiKey: key });
-            setAvailableModels(models);
-            // 若目前選擇的模型不在列表中，切換到第一個
-            if (models.length > 0 && !models.includes(modelName)) {
-                setModelName(models[0]);
+            const sorted = sortModelsByPrice(models);
+            setAvailableModels(sorted);
+            if (sorted.length > 0 && !sorted.includes(modelName)) {
+                setModelName(sorted[0]);
             }
         } catch {
-            // API Key 錯誤或網路問題時靜默失敗，保留內建清單
             setAvailableModels([]);
         } finally {
             setModelsLoading(false);
@@ -127,7 +159,11 @@ export function ReportPage({ isActive }: ReportPageProps) {
 
         setLoading(true);
         setOutput(t.processingReport);
-        // setReportPath("");
+
+        // 訂閱即時進度 event，每條訊息附加到輸出區
+        const unlisten = await listen<string>("report-progress", (ev) => {
+            setOutput((prev) => prev + "\n" + ev.payload);
+        });
 
         try {
             const result = await invoke("generate_report", {
@@ -136,21 +172,16 @@ export function ReportPage({ isActive }: ReportPageProps) {
                 modelName,
                 customPromptPath: customPromptPath || null,
             });
-            setOutput(result as string);
-
-            // 從結果中提取報告路徑
-            const match = (result as string).match(/輸出位置: (.+)/);
-            if (match) {
-                // setReportPath(match[1]);
-            }
+            setOutput((prev) => prev + "\n\n" + (result as string));
         } catch (err) {
             const errorMsg = String(err);
-            setOutput(`${t.error}: ${errorMsg}`);
+            setOutput((prev) => prev + "\n\n❌ " + errorMsg);
             await message(errorMsg, {
                 title: language === "zh" ? "API 處理發生錯誤" : "API Processing Error",
                 kind: "error"
             });
         } finally {
+            unlisten();
             setLoading(false);
         }
     }
@@ -283,29 +314,166 @@ export function ReportPage({ isActive }: ReportPageProps) {
                         {modelsLoading ? <span className="loading-spinner"></span> : "🔄"} {language === "zh" ? "重新偵測" : "Refresh"}
                     </button>
                 </div>
-                <select
-                    className="custom-file-select"
-                    value={modelName}
-                    onChange={(e) => setModelName(e.target.value)}
-                >
-                    {availableModels.length > 0 ? (
-                        availableModels.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                        ))
-                    ) : (
-                        <>
-                            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                        </>
-                    )}
-                </select>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <select
+                        className="custom-file-select"
+                        value={modelName}
+                        onChange={(e) => setModelName(e.target.value)}
+                        style={{ flex: 1 }}
+                    >
+                        {availableModels.length > 0 ? (
+                            availableModels.map((m) => (
+                                <option key={m} value={m}>{m}</option>
+                            ))
+                        ) : (
+                            <>
+                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                            </>
+                        )}
+                    </select>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => setShowPriceModal(true)}
+                        title={language === "zh" ? "查看定價" : "View pricing"}
+                        style={{ padding: "4px 10px", fontSize: "0.9rem", whiteSpace: "nowrap" }}
+                    >
+                        💰
+                    </button>
+                </div>
                 {availableModels.length > 0 && (
                     <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "4px" }}>
                         {language === "zh" ? `✅ 已偵測到 ${availableModels.length} 個可用模型` : `✅ ${availableModels.length} models detected`}
                     </div>
                 )}
             </div>
+
+            {/* 價格彈窗：顯示所有模型完整定價 */}
+            {showPriceModal && (() => {
+                const borderColor = "var(--border-color, #444)";
+                const textSecondary = "var(--text-secondary, #888)";
+                const modelsToShow = availableModels.length > 0 ? availableModels : Object.keys(pricingMap);
+                const thStyle: React.CSSProperties = {
+                    padding: "6px 10px", fontWeight: 600, fontSize: "0.78rem",
+                    borderBottom: `1px solid ${borderColor}`, whiteSpace: "pre-line",
+                    background: "#0f0f1a",
+                    color: "#e2e8f0",
+                    position: "sticky", top: 0, zIndex: 1,
+                };
+                const tdStyle: React.CSSProperties = {
+                    padding: "8px 10px", fontSize: "0.82rem", verticalAlign: "top",
+                    borderBottom: `1px solid ${borderColor}`, whiteSpace: "pre-line",
+                    background: "#2a2a3e",
+                };
+                return (
+                    <div
+                        style={{
+                            position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+                            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+                        }}
+                        onClick={() => setShowPriceModal(false)}
+                    >
+                        <div
+                            style={{
+                                background: "var(--bg-secondary, #1e1e2e)",
+                                border: `1px solid ${borderColor}`,
+                                borderRadius: "12px", padding: "24px",
+                                width: "min(860px, 95vw)", maxHeight: "80vh",
+                                display: "flex", flexDirection: "column",
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                                <h3 style={{ margin: 0, fontSize: "1rem" }}>
+                                    💰 {language === "zh" ? "Gemini 模型定價（標準方案）" : "Gemini Model Pricing (Standard)"}
+                                </h3>
+                                <span style={{ fontSize: "0.75rem", color: textSecondary }}>
+                                    {language === "zh" ? "每 100 萬 token（美元）· 每日更新" : "Per 1M tokens (USD) · Updated daily"}
+                                </span>
+                            </div>
+
+                            <div style={{ overflowY: "auto", flex: 1 }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ ...thStyle, textAlign: "left", width: "22%" }}>
+                                                {language === "zh" ? "模型" : "Model"}
+                                            </th>
+                                            <th style={{ ...thStyle, textAlign: "center", width: "19%" }}>
+                                                {language === "zh" ? "輸入（免費）" : "Input (Free)"}
+                                            </th>
+                                            <th style={{ ...thStyle, textAlign: "center", width: "30%" }}>
+                                                {language === "zh" ? "輸入（付費層級）" : "Input (Paid)"}
+                                            </th>
+                                            <th style={{ ...thStyle, textAlign: "center", width: "14%" }}>
+                                                {language === "zh" ? "輸出（免費）" : "Output (Free)"}
+                                            </th>
+                                            <th style={{ ...thStyle, textAlign: "center", width: "15%" }}>
+                                                {language === "zh" ? "輸出（付費）" : "Output (Paid)"}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {modelsToShow.map((m) => {
+                                            const p = pricingMap[m];
+                                            const isSelected = m === modelName;
+                                            return (
+                                                <tr
+                                                    key={m}
+                                                    onClick={() => { setModelName(m); setShowPriceModal(false); }}
+                                                    title={language === "zh" ? "點擊選擇此模型" : "Click to select"}
+                                                    style={{ cursor: "pointer" }}
+                                                >
+                                                    {(() => {
+                                                        const rowBg = isSelected ? "#3b3b6b" : "#2a2a3e";
+                                                        const cellStyle = { ...tdStyle, background: rowBg };
+                                                        return p ? (
+                                                            <>
+                                                                <td style={{ ...cellStyle, fontWeight: isSelected ? 700 : 400 }}>
+                                                                    {isSelected && <span style={{ color: "#818cf8", marginRight: 4 }}>▶</span>}
+                                                                    {m}
+                                                                </td>
+                                                                <td style={{ ...cellStyle, textAlign: "center", color: textSecondary }}>{p.input_free}</td>
+                                                                <td style={{ ...cellStyle, textAlign: "center" }}>{p.input_paid}</td>
+                                                                <td style={{ ...cellStyle, textAlign: "center", color: textSecondary }}>{p.output_free}</td>
+                                                                <td style={{ ...cellStyle, textAlign: "center" }}>{p.output_paid}</td>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <td style={{ ...cellStyle, fontWeight: isSelected ? 700 : 400 }}>
+                                                                    {isSelected && <span style={{ color: "#818cf8", marginRight: 4 }}>▶</span>}
+                                                                    {m}
+                                                                </td>
+                                                                <td colSpan={4} style={{ ...cellStyle, color: textSecondary, textAlign: "center" }}>
+                                                                    {language === "zh" ? "無定價資料" : "No pricing data"}
+                                                                </td>
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px" }}>
+                                <span style={{ fontSize: "0.72rem", color: textSecondary }}>
+                                    ai.google.dev/gemini-api/docs/pricing
+                                </span>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowPriceModal(false)}
+                                    style={{ padding: "4px 20px" }}
+                                >
+                                    {language === "zh" ? "關閉" : "Close"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* 自定義 Prompt 輸入 */}
             <div className="input-group" style={{ marginBottom: "20px" }}>

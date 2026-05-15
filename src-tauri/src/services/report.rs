@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use tauri::Emitter;
 
 // Gemini File API 回應結構
 #[derive(Debug, Deserialize)]
@@ -117,6 +118,7 @@ impl ReportAgent {
         output_path: &str,
         model_name: Option<String>,
         custom_prompt: Option<String>,
+        app: &tauri::AppHandle,
     ) -> Result<String, String> {
         // 0. 決定模型 (預設 gemini-3.1-pro-preview)
         let model = model_name.unwrap_or_else(|| "gemini-3.1-pro-preview".to_string());
@@ -173,18 +175,27 @@ impl ReportAgent {
                 .unwrap_or_default();
 
             println!("🎙️ 正在處理 ({}/{}) {}...", idx + 1, total, filename);
+            let _ = app.emit("report-progress", format!(
+                "🎙️ 正在處理 ({}/{})：{}", idx + 1, total, filename
+            ));
 
             match self
-                .process_single_file(audio_path.to_str().unwrap_or_default(), &model, &prompt)
+                .process_single_file(audio_path.to_str().unwrap_or_default(), &model, &prompt, app)
                 .await
             {
                 Ok(text) => {
+                    let _ = app.emit("report-progress", format!(
+                        "✅ ({}/{}) 完成：{}", idx + 1, total, filename
+                    ));
                     report_content.push_str(&format!(
                         "## 【個案來源：{}】\n\n{}\n\n---\n\n",
                         filename, text
                     ));
                 }
                 Err(e) => {
+                    let _ = app.emit("report-progress", format!(
+                        "❌ ({}/{}) 失敗：{}\n錯誤：{}", idx + 1, total, filename, e
+                    ));
                     // 發生錯誤時，將錯誤訊息寫入報告並立即中斷
                     report_content.push_str(&format!(
                         "## 【個案來源：{}】\n\n[API 呼叫中斷] {}\n\n---\n\n",
@@ -214,6 +225,7 @@ impl ReportAgent {
         file_path: &str,
         model_name: &str,
         prompt: &str,
+        app: &tauri::AppHandle,
     ) -> Result<String, String> {
         // 取得音檔長度
         let duration = Self::get_audio_duration_sync(file_path)?;
@@ -227,7 +239,7 @@ impl ReportAgent {
             println!("   -> {:.1} 分鐘 (短檔)，直接生成報告...", duration_min);
 
             let file_uri = self.upload_file(file_path).await?;
-            let result = self.generate_content(&file_uri, model_name, prompt).await?;
+            let result = self.generate_content(&file_uri, model_name, prompt, app).await?;
             let _ = self.delete_file(&file_uri).await;
 
             Ok(result)
@@ -252,6 +264,9 @@ impl ReportAgent {
                 let end_sec = ((i + 1) as f64 * segment_duration).min(duration);
 
                 println!("      正在聽寫第 {}/{} 段...", i + 1, segment_count);
+                let _ = app.emit("report-progress", format!(
+                    "   📎 長檔案分段處理：第 {}/{} 段...", i + 1, segment_count
+                ));
 
                 // 使用 FFmpeg 切割
                 let segment_path = temp_dir.join(format!("part_{}.mp3", i + 1));
@@ -265,7 +280,7 @@ impl ReportAgent {
 
                 // 上傳並處理分段
                 let file_uri = self.upload_file(segment_path.to_str().unwrap()).await?;
-                let part_text = self.generate_content(&file_uri, model_name, prompt).await?;
+                let part_text = self.generate_content(&file_uri, model_name, prompt, app).await?;
                 let _ = self.delete_file(&file_uri).await;
 
                 full_transcript.push_str(&format!("\n{}\n", part_text));
@@ -504,13 +519,16 @@ impl ReportAgent {
         Ok(())
     }
 
-    /// 使用 Gemini 生成內容
+    /// 使用 Gemini 生成內容（遇到 429 自動等待重試，最多 3 次）
     async fn generate_content(
         &self,
         file_uri: &str,
         model_name: &str,
         prompt: &str,
+        app: &tauri::AppHandle,
     ) -> Result<String, String> {
+        use tauri::Emitter;
+
         let url = format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
             model_name
@@ -532,34 +550,75 @@ impl ReportAgent {
             }],
         };
 
-        let response = self
-            .client
-            .post(&url)
-            .header("x-goog-api-key", &self.api_key)
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| format!("API 請求失敗: {}", e))?;
+        const MAX_RETRIES: u32 = 3;
+        const RETRY_WAIT_SECS: u64 = 65;
 
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("API 錯誤: {}", error_text));
+        for attempt in 0..MAX_RETRIES {
+            let response = self
+                .client
+                .post(&url)
+                .header("x-goog-api-key", &self.api_key)
+                .header("Content-Type", "application/json")
+                .json(&request)
+                .send()
+                .await
+                .map_err(|e| format!("API 請求失敗: {}", e))?;
+
+
+            let status = response.status();
+
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                if attempt + 1 < MAX_RETRIES {
+                    // 通知前端正在等待重試
+                    for remaining in (1..=RETRY_WAIT_SECS).rev() {
+                        let _ = app.emit("report-progress", format!(
+                            "⏳ 已達免費額度速率限制（429），等待 {} 秒後自動重試（第 {}/{} 次）...",
+                            remaining, attempt + 1, MAX_RETRIES - 1
+                        ));
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    }
+                    continue;
+                } else {
+                    return Err(
+                        "已達免費 API 速率限制（429 Too Many Requests）。\n\
+                        免費方案每分鐘請求數有限，建議：\n\
+                        1. 稍後再試\n\
+                        2. 升級至付費方案以移除限制".to_string()
+                    );
+                }
+            }
+
+            if !status.is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                // 解析常見錯誤碼給出友善訊息
+                let friendly = if error_text.contains("API_KEY_INVALID") || error_text.contains("API key not valid") {
+                    "API Key 無效，請確認金鑰是否正確。".to_string()
+                } else if error_text.contains("PERMISSION_DENIED") {
+                    "API Key 權限不足，此模型可能需要付費方案。".to_string()
+                } else if error_text.contains("RESOURCE_EXHAUSTED") {
+                    "已超過每日免費額度，請明天再試或升級付費方案。".to_string()
+                } else {
+                    format!("API 錯誤 ({}): {}", status.as_u16(), error_text)
+                };
+                return Err(friendly);
+            }
+
+            let result: GenerateResponse = response
+                .json()
+                .await
+                .map_err(|e| format!("解析回應失敗: {}", e))?;
+
+            let text = result
+                .candidates
+                .and_then(|c| c.into_iter().next())
+                .and_then(|c| c.content.parts.into_iter().next())
+                .and_then(|p| p.text)
+                .unwrap_or_else(|| "[無內容]".to_string());
+
+            return Ok(text);
         }
 
-        let result: GenerateResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("解析回應失敗: {}", e))?;
-
-        let text = result
-            .candidates
-            .and_then(|c| c.into_iter().next())
-            .and_then(|c| c.content.parts.into_iter().next())
-            .and_then(|p| p.text)
-            .unwrap_or_else(|| "[無內容]".to_string());
-
-        Ok(text)
+        Err("已達最大重試次數，請稍後再試。".to_string())
     }
 
     // 舊的 execute 方法 (保留向後相容)

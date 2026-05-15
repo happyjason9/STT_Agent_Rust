@@ -2,7 +2,7 @@
 
 專為醫療專業人員設計的強大、安全且跨平台的桌面應用程式，用於高效處理、編輯和分析錄音檔案。基於 **Rust** 的穩健性與 **React** 的靈活性構建。
 
-![Version](https://img.shields.io/badge/version-1.1.6-blue.svg)
+![Version](https://img.shields.io/badge/version-1.1.9-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)
 ![Tauri](https://img.shields.io/badge/built%20with-Tauri_v2-orange.svg)
 
@@ -22,10 +22,15 @@
 3.  **智慧消音 (Time-Based Silence)**
     *   **批次逐字稿 (Batch Transcription)**：自動轉錄整個資料夾的錄音檔，並儲存為隱藏的 JSON 結構 (`.silence_reg`)，不干擾原始檔案。
     *   **視覺化消音 (Visual Muting)**：在逐字稿介面上直接勾選敏感段落，精準移除病患姓名或隱私資訊。
+    *   **右鍵段落標記**：在逐字稿介面對段落按右鍵可快速標記，操作更直覺。(v1.1.7)
+    *   **進度條時間提示**：滑鼠移至進度條時即時顯示對應時間點。(v1.1.7)
     *   **無損處理**：僅對指定區段進行靜音，保留原始音質與時間軸。
 
 4.  **智慧報告 (AI Reporting)**
-    *   **深度整合 LLM**：支援整合 **Google Gemini Pro** or **Local LLM** 模型，理解上下文並生成專業報告。
+    *   **深度整合 LLM**：支援整合 **Google Gemini** 或 **Local LLM** 模型，理解上下文並生成專業報告。
+    *   **必填 API Key**：使用報告生成功能前，需在頁面填入 Google Gemini API Key。
+    *   **根據 API Key 等級自動列出可用模型**：系統會依照您的 API Key 權限，即時偵測並列出可選擇的 Gemini 模型（例如 Flash、Pro 等）。(v1.1.9)
+    *   **醫學術語中英對照**：報告中的醫學英文術語自動附上中文翻譯，提升可讀性。(v1.1.9)
     *   **自動化歸檔**：生成的報告會自動儲存至 `04_report` 資料夾，方便日後查閱與匯出。
     *   **高解析度紀錄**：生成「逐字稿等級」的詳細醫療紀錄，涵蓋病患主訴、病史摘要與處置建議。
 
@@ -34,25 +39,20 @@
 ## 📦 使用者指南：安裝教學 (Installation)
 
 ### Windows 使用者
-1.  前往本專案的 **Actions** 頁籤。
-2.  點擊列表最上方最新的成功 **Workflow Run** (通常有綠色勾勾)。
-3.  滑到頁面最下方的 **Artifacts** 區塊，下載 `windows-installer`。
-4.  解壓縮下載的檔案，執行安裝程式 (`.exe`) 並依照指示安裝。
-5.  本程式已內建 FFmpeg，**無需安裝任何額外軟體**即可使用。
+1.  前往本專案的 **[Releases 頁面](https://github.com/jasoncdc/STT_Agent_Rust/releases/latest)**。
+2.  下載 `STT_Agent_x.x.x_x64-setup.exe`。
+3.  執行安裝程式並依照指示完成安裝。
+4.  本程式已內建 FFmpeg，**無需安裝任何額外軟體**即可使用。
 
-### Linux 使用者 (Ubuntu/Debian)
-1.  前往本專案的 **Actions** 頁籤。
-2.  點擊列表最上方最新的成功 **Workflow Run**。
-3.  滑到頁面最下方的 **Artifacts** 區塊，下載 `Linux-Installer`。
-4.  解壓縮檔案，開啟終端機 (Terminal) 並使用 `apt` 安裝 (系統會自動處理相依性)：
+<!-- ### Linux 使用者 (Ubuntu/Debian)
+1.  前往本專案的 **[Releases 頁面](https://github.com/jasoncdc/STT_Agent_Rust/releases/latest)**。
+2.  下載 `STT_Agent_x.x.x_amd64.deb`。
+3.  開啟終端機 (Terminal) 並使用 `apt` 安裝 (系統會自動處理相依性)：
     ```bash
-    # 注意：Artifacts 通常是 zip 壓縮檔，請先解壓
-    unzip Linux-Installer.zip
-    
     # 執行安裝 (請將檔名替換為實際下載的版本)
-    sudo apt install ./STT_Agent_1.0.4_amd64.deb
+    sudo apt install ./STT_Agent_1.1.9_amd64.deb
     ```
-5.  安裝完成後，在應用程式選單搜尋 **"STT Agent"**，或在終端機輸入 `stt-agent` 即可啟動。
+4.  安裝完成後，在應用程式選單搜尋 **"STT Agent"**，或在終端機輸入 `stt-agent` 即可啟動。 -->
 
 ---
 

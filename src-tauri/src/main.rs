@@ -36,6 +36,7 @@ fn main() {
             commands::report_cmd::read_custom_prompt,
             commands::report_cmd::convert_md_to_docx,
             commands::report_cmd::list_gemini_models,
+            commands::report_cmd::fetch_gemini_pricing,
             commands::app_cmd::exit_app,
             commands::app_cmd::uninstall_app,
             // Audio player commands
