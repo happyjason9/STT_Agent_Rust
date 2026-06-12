@@ -136,9 +136,9 @@ pub async fn generate_report(
         .await?;
 
     // 2. 自動轉換為 DOCX
-    let docx_result = match convert_md_to_docx_internal(&output_path).await {
+    let docx_result = match convert_md_to_docx_internal(&output_path, &app).await {
         Ok(docx_path) => format!("\n\n✅ 已自動轉換為 Word 文件: {}", docx_path),
-        Err(e) => format!("\n\n⚠️ Word 轉換失敗 (請確認已安裝 Pandoc): {}", e),
+        Err(e) => format!("\n\n⚠️ Word 轉換失敗: {}", e),
     };
 
     Ok(format!("{}{}", report_result, docx_result))
@@ -146,28 +146,30 @@ pub async fn generate_report(
 
 /// 將 Markdown 轉換為 DOCX (Command)
 #[command]
-pub async fn convert_md_to_docx(md_path: String) -> Result<String, String> {
-    let docx_path = convert_md_to_docx_internal(&md_path).await?;
+pub async fn convert_md_to_docx(app: tauri::AppHandle, md_path: String) -> Result<String, String> {
+    let docx_path = convert_md_to_docx_internal(&md_path, &app).await?;
     Ok(format!("轉換成功！\nDOCX 檔案位置: {}", docx_path))
 }
 
-/// 內部函數：執行 Pandoc 轉換
-async fn convert_md_to_docx_internal(md_path: &str) -> Result<String, String> {
-    // 驗證檔案存在
+/// 內部函數：執行 Pandoc Sidecar 轉換
+async fn convert_md_to_docx_internal(md_path: &str, app: &tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_shell::ShellExt;
+
     let md_file = Path::new(md_path);
     if !md_file.exists() {
         return Err(format!("找不到檔案: {}", md_path));
     }
 
-    // 產生 DOCX 輸出路徑
     let docx_path = md_path.replace(".md", ".docx");
 
-    // 使用 Pandoc 轉換
-    let output = tokio::process::Command::new("pandoc")
+    let output = app
+        .shell()
+        .sidecar("pandoc")
+        .map_err(|e| format!("無法建立 Pandoc Sidecar: {}", e))?
         .args([md_path, "-o", &docx_path, "--from=markdown", "--to=docx"])
         .output()
         .await
-        .map_err(|e| format!("無法執行 Pandoc: {}。請確認已安裝 Pandoc。", e))?;
+        .map_err(|e| format!("無法執行 Pandoc: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

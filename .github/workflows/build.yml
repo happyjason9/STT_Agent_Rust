@@ -37,17 +37,31 @@ jobs:
           New-Item -ItemType Directory -Force -Path src-tauri/binaries
           $ffmpegSizeLimit = 10MB
           $ffmpegReal = Get-ChildItem -Path C:\ProgramData\chocolatey\lib\ffmpeg -Recurse -Filter ffmpeg.exe | Where-Object { $_.Length -gt $ffmpegSizeLimit } | Sort-Object Length -Descending | Select-Object -First 1
-          
+
           if ($null -eq $ffmpegReal) {
               echo "Error: Could not find real ffmpeg.exe"
               exit 1
           }
-          
+
           $ffmpegPath = $ffmpegReal.FullName
           echo "Found real FFmpeg at: $ffmpegPath"
-          
+
           Copy-Item $ffmpegPath -Destination src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe
           Copy-Item $ffmpegPath -Destination src-tauri/ffmpeg-x86_64-pc-windows-msvc.exe
+
+      - name: Bundle Pandoc Sidecar
+        run: |
+          $pandocVersion = "3.6.4"
+          $pandocZip = "pandoc-${pandocVersion}-windows-x86_64.zip"
+          $pandocUrl = "https://github.com/jgm/pandoc/releases/download/${pandocVersion}/${pandocZip}"
+
+          Invoke-WebRequest -Uri $pandocUrl -OutFile $pandocZip
+          Expand-Archive -Path $pandocZip -DestinationPath pandoc-tmp
+
+          $pandocExe = Get-ChildItem -Path pandoc-tmp -Recurse -Filter pandoc.exe | Select-Object -First 1
+          Copy-Item $pandocExe.FullName -Destination src-tauri/binaries/pandoc-x86_64-pc-windows-msvc.exe
+
+          Remove-Item -Recurse -Force pandoc-tmp, $pandocZip
 
       - name: Install dependencies
         run: npm ci
