@@ -60,6 +60,7 @@ jobs:
 
           $pandocExe = Get-ChildItem -Path pandoc-tmp -Recurse -Filter pandoc.exe | Select-Object -First 1
           Copy-Item $pandocExe.FullName -Destination src-tauri/binaries/pandoc-x86_64-pc-windows-msvc.exe
+          Copy-Item $pandocExe.FullName -Destination src-tauri/pandoc-x86_64-pc-windows-msvc.exe
 
           Remove-Item -Recurse -Force pandoc-tmp, $pandocZip
 
