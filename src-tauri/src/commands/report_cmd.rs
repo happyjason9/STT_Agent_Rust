@@ -117,16 +117,18 @@ pub async fn generate_report(
     };
 
     // 根據資料夾路徑推算輸出路徑 (04_report/report.md)
+    // 不論選哪個子資料夾（01_convert, 02_split 等），都找到案件根目錄再存到 04_report
     let output_path = {
         let folder = Path::new(&folder_path);
-        if folder.ends_with("02_split") {
-            folder
-                .parent()
-                .map(|p| p.join("04_report").join("report.md").to_string_lossy().to_string())
-                .unwrap_or_else(|| format!("{}/report.md", folder_path))
+        let sub_folders = ["01_convert", "01_converted", "02_split", "03_audio", "04_report"];
+        let case_root = if sub_folders.iter().any(|s| folder.ends_with(s)) {
+            folder.parent()
         } else {
-            format!("{}/report.md", folder_path)
-        }
+            Some(folder)
+        };
+        case_root
+            .map(|p| p.join("04_report").join("report.md").to_string_lossy().to_string())
+            .unwrap_or_else(|| format!("{}/report.md", folder_path))
     };
 
     // 1. 生成報告 (Markdown)

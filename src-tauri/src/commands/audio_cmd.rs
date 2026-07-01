@@ -148,6 +148,7 @@ pub async fn split_audio_segments(
     state: tauri::State<'_, CurrentProjectState>,
     audio_path: String,
     segments: Vec<SegmentInfo>,
+    prefix_index: bool,
 ) -> Result<String, String> {
     if audio_path.is_empty() {
         return Err("未載入音訊檔案".to_string());
@@ -179,10 +180,18 @@ pub async fn split_audio_segments(
     project_paths.create_all_dirs()?;
     let output_dir_str = project_paths.split.to_string_lossy().to_string();
 
-    // 轉換段落資料格式
+    // 轉換段落資料格式，若 prefix_index 則加上順序前綴
     let segment_tuples: Vec<(String, String, String)> = segments
         .into_iter()
-        .map(|s| (s.name, s.start_time, s.end_time))
+        .enumerate()
+        .map(|(i, s)| {
+            let name = if prefix_index {
+                format!("{}{}", i + 1, s.name)
+            } else {
+                s.name
+            };
+            (name, s.start_time, s.end_time)
+        })
         .collect();
 
     // 執行切割

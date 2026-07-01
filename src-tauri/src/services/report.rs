@@ -245,14 +245,17 @@ impl ReportAgent {
             Ok(result)
         } else {
             // 長檔案：分段處理
+            // 每段最長 30 分鐘，動態計算段數
+            const MAX_SEGMENT_MIN: f64 = 30.0;
+            let segment_count = (duration_min / MAX_SEGMENT_MIN).ceil() as usize;
+            let segment_duration = duration / segment_count as f64;
+
             println!(
-                "   -> ⚠️ {:.1} 分鐘 (長檔)，啟動「分段聽寫」模式...",
-                duration_min
+                "   -> ⚠️ {:.1} 分鐘 (長檔)，啟動「分段聽寫」模式（共 {} 段，每段約 {:.1} 分鐘）...",
+                duration_min, segment_count, segment_duration / 60.0
             );
 
             let mut full_transcript = String::new();
-            let segment_count = 3;
-            let segment_duration = duration / segment_count as f64;
 
             // 建立暫存目錄
             let parent = Path::new(file_path).parent().unwrap_or(Path::new("."));

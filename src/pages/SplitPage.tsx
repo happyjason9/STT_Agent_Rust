@@ -60,6 +60,7 @@ export function SplitPage() {
         { id: 1, name: "", startTime: "", endTime: "" }
     ]);
     const [nextId, setNextId] = useState(2);
+    const [prefixIndex, setPrefixIndex] = useState(false);
 
     // Hover time for progress bar
     const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -306,6 +307,44 @@ export function SplitPage() {
         handleCancelMark();
     };
 
+    // 匯入時間清單 txt 檔
+    async function handleImportTxt() {
+        const selected = await open({
+            multiple: false,
+            filters: [{ name: "Text Files", extensions: ["txt"] }],
+        });
+        if (!selected || typeof selected !== "string") return;
+
+        try {
+            const content = await invoke<string>("read_text_file", { path: selected });
+            const lines = content.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+            const parsed: Segment[] = [];
+            let idCounter = nextId;
+
+            for (const line of lines) {
+                // 格式：名稱 開始時間 結束時間（空白分隔）
+                const parts = line.split(/\s+/);
+                if (parts.length < 3) continue;
+                const endTime = parts[parts.length - 1];
+                const startTime = parts[parts.length - 2];
+                const name = parts.slice(0, parts.length - 2).join(" ");
+                if (!name || !startTime || !endTime) continue;
+                parsed.push({ id: idCounter++, name, startTime, endTime });
+            }
+
+            if (parsed.length === 0) {
+                setOutput("⚠️ 找不到有效的段落資料，請確認格式為：名稱 開始時間 結束時間");
+                return;
+            }
+
+            setSegments(parsed);
+            setNextId(idCounter);
+            setOutput(`✅ 已匯入 ${parsed.length} 個段落`);
+        } catch (e) {
+            setOutput(`⚠️ 讀取檔案失敗: ${e}`);
+        }
+    }
+
     // 新增段落
     function addSegment() {
         const newSegment: Segment = {
@@ -382,6 +421,7 @@ export function SplitPage() {
                     startTime: s.startTime,
                     endTime: s.endTime,
                 })),
+                prefixIndex,
             });
             setOutput(result as string);
         } catch (err) {
@@ -599,9 +639,14 @@ export function SplitPage() {
             <div className="segment-section mt-4 fade-in-up">
                 <div className="section-header display-flex justify-between align-center mb-3">
                     <h3>📋 {t.segmentList}</h3>
-                    <button onClick={addSegment} className="btn btn-secondary btn-sm">
-                        ➕ {t.addSegment}
-                    </button>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                        <button onClick={handleImportTxt} className="btn btn-secondary btn-sm">
+                            📂 匯入時間清單
+                        </button>
+                        <button onClick={addSegment} className="btn btn-secondary btn-sm">
+                            ➕ {t.addSegment}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="table-container" style={{ marginTop: '12px' }}>
@@ -706,7 +751,7 @@ export function SplitPage() {
                 </div>
 
                 {/* Split Controls */}
-                <div className="action-footer mt-4">
+                <div className="action-footer mt-4" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                     <button
                         className="btn btn-primary btn-large"
                         onClick={runSplit}
@@ -719,6 +764,23 @@ export function SplitPage() {
                             {loading ? t.splitting : t.runSplit}
                         </span>
                     </button>
+                    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", userSelect: "none", color: "var(--text-secondary, #aaa)", fontSize: "14px" }}>
+                        <div
+                            onClick={() => setPrefixIndex(v => !v)}
+                            style={{
+                                width: "40px", height: "22px", borderRadius: "11px",
+                                backgroundColor: prefixIndex ? "var(--accent, #4a9eff)" : "var(--border-strong, #555)",
+                                position: "relative", transition: "background-color 0.2s", cursor: "pointer", flexShrink: 0
+                            }}
+                        >
+                            <div style={{
+                                width: "16px", height: "16px", borderRadius: "50%", backgroundColor: "#fff",
+                                position: "absolute", top: "3px", transition: "left 0.2s",
+                                left: prefixIndex ? "21px" : "3px"
+                            }} />
+                        </div>
+                        照時間順序編號（1王小明、2王美惠…）
+                    </label>
                 </div>
             </div>
 
