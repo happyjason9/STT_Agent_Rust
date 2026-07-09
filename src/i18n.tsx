@@ -36,6 +36,8 @@ export const translations = {
     split: "切割",
     silence: "消音",
     report: "報告",
+    otherToolsSection: "其他工具",
+    mediaSplit: "MP4 切割",
     // About Dialog
     aboutTitle: "關於 會議轉錄助理",
     version: "版本",
@@ -80,6 +82,11 @@ export const translations = {
     errorLoadAudio: "請先載入音訊檔案",
     errorSetSegment: "請至少設定一個完整的段落（名稱、開始時間、結束時間）",
     loaded: "已載入",
+    // MediaSplitPage（其他工具 - MP4 切割）
+    mediaSplitTitle: "MP4 切割",
+    mediaSplitDescription: "直接對 MP4 等影片檔案進行片段切割，不需先轉檔為音檔，也不綁定專案資料夾。",
+    mediaSplitOutputDir: "輸出資料夾",
+    mediaSplitErrorNoOutputDir: "請先選擇輸出資料夾",
     // SilencePage
     silenceTitle: "消音處理",
     silenceDescription: "針對敏感片段做消音處理",
@@ -174,6 +181,8 @@ export const translations = {
     split: "Split",
     silence: "Silence",
     report: "Report",
+    otherToolsSection: "Other Tools",
+    mediaSplit: "MP4 Split",
     // About Dialog
     aboutTitle: "About Meeting Transcription Assistant",
     version: "Version",
@@ -218,6 +227,11 @@ export const translations = {
     errorLoadAudio: "Please load an audio file first",
     errorSetSegment: "Please set at least one complete segment (name, start time, end time)",
     loaded: "Loaded",
+    // MediaSplitPage (Other Tools - MP4 Split)
+    mediaSplitTitle: "MP4 Split",
+    mediaSplitDescription: "Split MP4 and other video files directly into segments, without converting to audio first or requiring a project folder.",
+    mediaSplitOutputDir: "Output Folder",
+    mediaSplitErrorNoOutputDir: "Please select an output folder first",
     // SilencePage
     silenceTitle: "Silence Detection",
     silenceDescription: "Analyze and process silent sections in audio files.",

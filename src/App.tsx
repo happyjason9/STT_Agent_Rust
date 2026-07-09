@@ -12,9 +12,10 @@ import { SilencePage } from "./pages/SilencePage";
 import { SilenceAutoPage } from "./pages/SilenceAutoPage";
 import { WelcomePage } from "./pages/WelcomePage";
 import { ReportPage } from "./pages/ReportPage";
+import { MediaSplitPage } from "./pages/MediaSplitPage";
 import { useI18n } from "./i18n";
 
-type Tab = "welcome" | "convert" | "split" | "silence" | "silence-auto" | "report";
+type Tab = "welcome" | "convert" | "split" | "silence" | "silence-auto" | "report" | "media-split";
 type MenuOpen = "file" | "edit" | null;
 type Theme = "dark" | "light";
 
@@ -67,6 +68,22 @@ const SilenceIcon = () => (
     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
     <line x1="23" y1="9" x2="17" y2="15" />
     <line x1="17" y1="9" x2="23" y2="15" />
+  </svg>
+);
+
+const MediaSplitIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="M10 9l5 3-5 3z" />
   </svg>
 );
 
@@ -160,6 +177,15 @@ function App() {
       { id: "silence", labelKey: "silence", icon: <SilenceIcon /> },
       { id: "silence-auto", labelKey: "silenceAuto", icon: <SilenceIcon /> },
       { id: "report", labelKey: "report", icon: <ReportIcon /> },
+    ];
+
+  // 「其他工具」分類：與主要工作流程無關的獨立小工具
+  const otherToolItems: {
+    id: Tab;
+    labelKey: keyof typeof t;
+    icon: React.ReactNode;
+  }[] = [
+      { id: "media-split", labelKey: "mediaSplit", icon: <MediaSplitIcon /> },
     ];
 
   // Helper to save recent project
@@ -313,7 +339,7 @@ function App() {
             <h2>{t.aboutTitle}</h2>
             <div className="about-info">
               <p>
-                <strong>{t.version}:</strong> 1.8.0
+                <strong>{t.version}:</strong> 1.9.0
               </p>
               <p>{t.description}</p>
             </div>
@@ -517,6 +543,30 @@ function App() {
                   )}
                 </button>
               ))}
+
+              {/* 其他工具分類 */}
+              {!isSidebarCollapsed ? (
+                <div className="sidebar-section-label">
+                  {t.otherToolsSection}
+                </div>
+              ) : (
+                <div className="sidebar-section-divider" title={t.otherToolsSection} />
+              )}
+              {otherToolItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`sidebar-item ${activeTab === item.id ? "active" : ""}`}
+                  title={isSidebarCollapsed ? (t[item.labelKey] as string) : ""}
+                >
+                  <span className="sidebar-icon">{item.icon}</span>
+                  {!isSidebarCollapsed && (
+                    <span className="sidebar-label">
+                      {t[item.labelKey] as string}
+                    </span>
+                  )}
+                </button>
+              ))}
             </nav>
 
             {/* Vertical Toggle Strip */}
@@ -559,6 +609,9 @@ function App() {
             </div>
             <div style={{ display: activeTab === "report" ? "block" : "none" }}>
               <ReportPage isActive={activeTab === "report"} />
+            </div>
+            <div style={{ display: activeTab === "media-split" ? "block" : "none" }}>
+              <MediaSplitPage />
             </div>
           </div>
         </main>

@@ -26,6 +26,7 @@ STT Agent 是提供公司內部同事**本地端使用**的桌面應用程式,�
 | 專案管理(建立工作資料夾結構) | `src/pages/WelcomePage.tsx` | `commands/project_cmd.rs`、`services/file_manager.rs` |
 | 音檔轉 MP3 | `src/pages/ConvertPage.tsx` | `commands/audio_cmd.rs`、`services/converter.rs` |
 | 音檔切割 | `src/pages/SplitPage.tsx` | `services/splitter.rs` |
+| 其他工具 → MP4 切割(獨立於專案結構,輸出到自選資料夾) | `src/pages/MediaSplitPage.tsx` | `commands/media_split_cmd.rs`(共用 `services/splitter.rs`) |
 | 手動消音 | `src/pages/SilencePage.tsx` | `services/silence.rs` |
 | 批次逐字稿 + 自動消音 | `src/pages/SilenceAutoPage.tsx` | `commands/silence_cmd.rs`(需連 ASR 伺服器) |
 | AI 報告生成(Gemini) | `src/pages/ReportPage.tsx` | `commands/report_cmd.rs`、`services/report.rs` |
@@ -127,6 +128,8 @@ CI 內兩者皆為**固定版本 + SHA256 驗證**,任一不符 build 直接失�
 | 3 | `ASR_NER_SERVER/` 的 `/transcribe` 有路徑穿越漏洞(`file.filename` 未消毒)、綁 `0.0.0.0`、CORS 全開、無認證 | 中 | ⏸️ 暫不處理 | 該服務目前停滯、無人部署使用。**若未來要重新啟用,必須先修**:檔名改 `os.path.basename()` 或亂數、綁 `127.0.0.1` 或加 token 認證 |
 | 4 | `file_cmd.rs` 的讀寫檔指令接受任意路徑(違反最小權限,但目前前端無 XSS 破口,風險受控) | 中低 | ⏸️ 暫不處理 | 維持現狀。**注意:未來若有任何頁面以 HTML 方式渲染伺服器/AI 回傳內容,需回頭限制路徑範圍** |
 | 5 | 逐字稿功能走明文 HTTP 傳音檔 | 低 | ⏸️ 暫不處理 | 同 #3,服務停滯。重啟時若跨機使用建議上 HTTPS |
+| 7 | 切割功能(音檔/MP4)使用 `ffmpeg -c copy` 純流複製,不會新增、移除或燒錄任何畫面/字幕內容 | — | 📌 已排查非 bug | 曾有同事反映「切出來的 MP4 有字幕」,查證後確認：原始 Google Meet 錄影檔本身在畫面上已燒錄即時字幕(`format.tags.encoder == "Google"` 可辨識來源),`-c copy` 只是忠實複製原始畫面,不會產生或消除字幕。用 `md5sum` 比對不同檔名、相同時間區間切出的兩個檔案,雜湊值完全相同,證實內容不受檔名影響 |
+| 8 | (環境問題,非本專案 bug)Linux 開發機上,用 GNOME Files (Nautilus) 對切割出的 mp4 按右鍵「Properties」會讓整個 Files 當掉 | — | 📌 已排查,不處理 | 原因是 Nautilus 縮圖產生器呼叫 VLC 走 VA-API/NVIDIA VDPAU 硬體解碼失敗(`vaCreateSurfaces: attribute not supported` → GStreamer 斷言失敗崩潰),與本專案程式碼、FFmpeg 輸出內容無關,任何 mp4 檔案在此環境下都可能觸發。Windows 使用者(檔案總管縮圖機制不同)不會遇到。如需修復可關閉 Nautilus 的影片縮圖預覽或清除 `~/.cache/thumbnails` |
 | 6 | 音檔上傳 Google Gemini 未告知使用者 | 低 | ✅ 已修(2026-07-09) | ReportPage 加入中英文警語 |
 
 ### 給接手者的資安維護建議

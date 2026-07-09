@@ -59,6 +59,8 @@ fn main() {
             commands::file_cmd::read_text_file,
             commands::file_cmd::check_file_exists,
             commands::file_cmd::ensure_dir_exists,
+            // Other Tools - Media Split
+            commands::media_split_cmd::split_media_segments,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
