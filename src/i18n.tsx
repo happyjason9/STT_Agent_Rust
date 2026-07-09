@@ -114,6 +114,7 @@ export const translations = {
     // ReportPage
     reportTitle: "報告生成",
     reportDescription: "使用 Gemini AI 分析音檔並產出逐字稿報告。",
+    cloudUploadNotice: "生成報告時，音檔會上傳至 Google Gemini 雲端服務進行分析（處理完成後會自動刪除雲端檔案）。請勿上傳含有機敏或不宜外流內容的音檔。",
     audioFolder: "音檔資料夾",
     selectFolderPlaceholder: "請選擇資料夾...",
     apiKeyLabel: "Google Gemini API Key",
@@ -251,6 +252,7 @@ export const translations = {
     // ReportPage
     reportTitle: "Report Generation",
     reportDescription: "Use Gemini AI to analyze audio files and generate transcript reports.",
+    cloudUploadNotice: "When generating a report, audio files are uploaded to Google Gemini cloud services for analysis (cloud copies are deleted automatically after processing). Do not upload audio containing sensitive or confidential content.",
     audioFolder: "Audio Folder",
     selectFolderPlaceholder: "Please select a folder...",
     apiKeyLabel: "Google Gemini API Key",

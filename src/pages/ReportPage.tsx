@@ -251,6 +251,25 @@ export function ReportPage({ isActive }: ReportPageProps) {
             <h2 className="page-title">📄 {t.reportTitle}</h2>
             <p className="page-description">{t.reportDescription}</p>
 
+            {/* 雲端上傳提醒 */}
+            <div
+                style={{
+                    display: "flex",
+                    gap: "8px",
+                    alignItems: "flex-start",
+                    padding: "10px 14px",
+                    marginBottom: "20px",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(230, 162, 60, 0.5)",
+                    background: "rgba(230, 162, 60, 0.12)",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.5,
+                }}
+            >
+                <span aria-hidden="true">⚠️</span>
+                <span>{t.cloudUploadNotice}</span>
+            </div>
+
             {/* 資料夾選擇 - UI Adjusted: Button top-left of input */}
             <div className="input-group" style={{ marginBottom: "20px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>

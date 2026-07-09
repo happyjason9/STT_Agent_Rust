@@ -29,33 +29,58 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install FFmpeg
-        run: choco install ffmpeg -y
-
+      # 供應鏈安全：sidecar 一律固定版本 + SHA256 驗證。
+      # 升級版本時，請先在本機下載新檔計算 SHA256，再同步更新這裡的雜湊值。
       - name: Bundle FFmpeg Sidecar
         run: |
-          New-Item -ItemType Directory -Force -Path src-tauri/binaries
-          $ffmpegSizeLimit = 10MB
-          $ffmpegReal = Get-ChildItem -Path C:\ProgramData\chocolatey\lib\ffmpeg -Recurse -Filter ffmpeg.exe | Where-Object { $_.Length -gt $ffmpegSizeLimit } | Sort-Object Length -Descending | Select-Object -First 1
+          $ffmpegVersion = "8.0.1"
+          $ffmpegZip = "ffmpeg-${ffmpegVersion}-essentials_build.zip"
+          $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/packages/${ffmpegZip}"
+          $ffmpegSha256 = "e2aaeaa0fdbc397d4794828086424d4aaa2102cef1fb6874f6ffd29c0b88b673"
 
-          if ($null -eq $ffmpegReal) {
-              echo "Error: Could not find real ffmpeg.exe"
+          Invoke-WebRequest -Uri $ffmpegUrl -OutFile $ffmpegZip
+
+          $actualHash = (Get-FileHash $ffmpegZip -Algorithm SHA256).Hash.ToLower()
+          if ($actualHash -ne $ffmpegSha256) {
+              echo "Error: FFmpeg SHA256 mismatch!"
+              echo "Expected: $ffmpegSha256"
+              echo "Actual:   $actualHash"
+              exit 1
+          }
+          echo "FFmpeg SHA256 verified: $actualHash"
+
+          Expand-Archive -Path $ffmpegZip -DestinationPath ffmpeg-tmp
+          $ffmpegExe = Get-ChildItem -Path ffmpeg-tmp -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+
+          if ($null -eq $ffmpegExe) {
+              echo "Error: Could not find ffmpeg.exe in archive"
               exit 1
           }
 
-          $ffmpegPath = $ffmpegReal.FullName
-          echo "Found real FFmpeg at: $ffmpegPath"
+          New-Item -ItemType Directory -Force -Path src-tauri/binaries
+          Copy-Item $ffmpegExe.FullName -Destination src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe
+          Copy-Item $ffmpegExe.FullName -Destination src-tauri/ffmpeg-x86_64-pc-windows-msvc.exe
 
-          Copy-Item $ffmpegPath -Destination src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe
-          Copy-Item $ffmpegPath -Destination src-tauri/ffmpeg-x86_64-pc-windows-msvc.exe
+          Remove-Item -Recurse -Force ffmpeg-tmp, $ffmpegZip
 
       - name: Bundle Pandoc Sidecar
         run: |
           $pandocVersion = "3.6.4"
           $pandocZip = "pandoc-${pandocVersion}-windows-x86_64.zip"
           $pandocUrl = "https://github.com/jgm/pandoc/releases/download/${pandocVersion}/${pandocZip}"
+          $pandocSha256 = "a9e5feb3d56d2fb0e3e765d1c33b8ee6b72e6963d7de31504edeec8cd1be34b1"
 
           Invoke-WebRequest -Uri $pandocUrl -OutFile $pandocZip
+
+          $actualHash = (Get-FileHash $pandocZip -Algorithm SHA256).Hash.ToLower()
+          if ($actualHash -ne $pandocSha256) {
+              echo "Error: Pandoc SHA256 mismatch!"
+              echo "Expected: $pandocSha256"
+              echo "Actual:   $actualHash"
+              exit 1
+          }
+          echo "Pandoc SHA256 verified: $actualHash"
+
           Expand-Archive -Path $pandocZip -DestinationPath pandoc-tmp
 
           $pandocExe = Get-ChildItem -Path pandoc-tmp -Recurse -Filter pandoc.exe | Select-Object -First 1
@@ -74,9 +99,49 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: app-v__VERSION__ 
+          tagName: app-v__VERSION__
           releaseName: "App v__VERSION__"
           releaseBody: "See the assets to download this version and install."
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+
+      # 資安：計算安裝檔 SHA256，上傳 SHA256SUMS.txt 並寫入 Release 說明，
+      # 讓使用者下載後可自行比對檔案是否遭竄改。
+      - name: Publish installer SHA256
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $tag = "app-v$version"
+
+          $bundleDir = "src-tauri/target/release/bundle/nsis"
+          $assets = Get-ChildItem -Path $bundleDir -File | Where-Object { $_.Name -match '\.(exe|zip)$' }
+
+          if ($assets.Count -eq 0) {
+              echo "Error: No installer artifacts found in $bundleDir"
+              exit 1
+          }
+
+          $sumLines = @()
+          foreach ($f in $assets) {
+              $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+              $sumLines += "$h  $($f.Name)"
+          }
+          $sumLines | Out-File -FilePath SHA256SUMS.txt -Encoding ascii
+          Get-Content SHA256SUMS.txt
+
+          gh release upload $tag SHA256SUMS.txt --clobber
+
+          $setupLine = $sumLines | Where-Object { $_ -match 'setup\.exe$' } | Select-Object -First 1
+          $notes = @()
+          $notes += "See the assets to download this version and install."
+          $notes += ""
+          $notes += "### SHA256 checksum"
+          $notes += '```'
+          $notes += $setupLine
+          $notes += '```'
+          $notes += "下載後請在 PowerShell 執行 ``Get-FileHash 安裝檔路徑 -Algorithm SHA256``，確認結果與上方一致再安裝。完整清單見附件 SHA256SUMS.txt。"
+          $notes -join "`n" | Out-File -FilePath release-notes.md -Encoding utf8
+
+          gh release edit $tag --notes-file release-notes.md
